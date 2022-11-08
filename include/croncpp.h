@@ -250,13 +250,21 @@ namespace cron
    {
       inline std::time_t tm_to_time(std::tm& date)
       {
+#ifdef __USE_MISC
+         return timegm(&date);
+#elif _WIN32
+         return _mkgmtime(&date);
+#else
          return std::mktime(&date);
+#endif
       }
 
       inline std::tm* time_to_tm(std::time_t const * date, std::tm* const out)
       {
-#ifdef _WIN32
-         errno_t err = localtime_s(out, date);
+#ifdef __USE_MISC
+         return gmtime_r(date, out);
+#elif _WIN32
+         errno_t err = gmtime_s(out, date);
          return 0 == err ? out : nullptr;
 #else
          return localtime_r(date, out);
@@ -265,7 +273,7 @@ namespace cron
 
       inline std::tm to_tm(CRONCPP_STRING_VIEW time)
       {
-         std::tm result;
+         std::tm result{};
 #if __cplusplus > 201103L
          std::istringstream str(time.data());
          str.imbue(std::locale(setlocale(LC_ALL, nullptr)));
@@ -288,10 +296,11 @@ namespace cron
          result.tm_sec = second;
 #endif
          result.tm_isdst = -1; // DST info not available
+         if (INVALID_TIME == utils::tm_to_time(result)) throw std::runtime_error("Parsing date failed!");
 
          return result;
       }
-
+      
       inline std::string to_string(std::tm const & tm)
       {
 #if __cplusplus > 201103L
